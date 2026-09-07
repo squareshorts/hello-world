@@ -8,8 +8,33 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - run: echo probe-ok > probe.txt
+      - name: Download sex-specific pesticide GWAS
+        run: |
+          set -euo pipefail
+          base=https://broad-ukb-sumstats-us-east-1.s3.amazonaws.com/round2/additive-tsvs
+          curl -L --fail --retry 3 -o female.bgz $base/22614_1.gwas.imputed_v3.female.v2.tsv.bgz
+          curl -L --fail --retry 3 -o male.bgz $base/22614_1.gwas.imputed_v3.male.v2.tsv.bgz
+          ls -lh female.bgz male.bgz
+      - name: Inspect formats and candidate instruments
+        run: |
+          set -euo pipefail
+          {
+            echo '=== FEMALE HEADER ==='
+            zcat female.bgz | head -3 || true
+            echo '=== MALE HEADER ==='
+            zcat male.bgz | head -3 || true
+            echo '=== FEMALE P<1E-5 SAMPLE ==='
+            zcat female.bgz | awk 'NR==1{print;next} $0 ~ /^#/ {next} {print}' | head -5 || true
+          } > probe.txt
+          python - <<'PY'
+          import gzip
+          for fn in ['female.bgz','male.bgz']:
+              with gzip.open(fn,'rt') as f:
+                  header=f.readline().strip().split('\t')
+                  print(fn, header)
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: probe
