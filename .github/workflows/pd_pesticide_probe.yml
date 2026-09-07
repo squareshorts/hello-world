@@ -1,0 +1,17 @@
+name: PD pesticide probe
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo probe-ok > probe.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: probe
+          path: probe.txt
+          retention-days: 1
