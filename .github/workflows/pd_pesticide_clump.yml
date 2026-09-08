@@ -1,0 +1,154 @@
+name: PD pesticide sex-specific instrument clumping
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  clump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Install PLINK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq plink1.9
+          command -v plink1.9 || command -v plink
+
+      - name: Download 1000 Genomes EUR LD reference
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 4 --retry-delay 5 -o 1kg.v3.tgz https://fileserve.mrcieu.ac.uk/ld/1kg.v3.tgz
+          tar -xzf 1kg.v3.tgz
+          find . -maxdepth 3 -type f \( -name 'EUR.bed' -o -name 'EUR.bim' -o -name 'EUR.fam' \) -print
+          REF_BIM=$(find . -type f -name EUR.bim | head -1)
+          test -n "$REF_BIM"
+          echo "REF_PREFIX=${REF_BIM%.bim}" >> "$GITHUB_ENV"
+
+      - name: Download sex-specific occupational GWAS
+        run: |
+          set -euo pipefail
+          base=https://broad-ukb-sumstats-us-east-1.s3.amazonaws.com/round2/additive-tsvs
+          mkdir -p gwas
+          for code in 22614_1 22614_2 22614_0 22610_2; do
+            for sex in female male; do
+              out="gwas/${code}_${sex}.bgz"
+              curl -L --fail --retry 4 --retry-delay 5 -o "$out" "$base/${code}.gwas.imputed_v3.${sex}.v2.tsv.bgz"
+              ls -lh "$out"
+            done
+          done
+
+      - name: Extract candidates and map to EUR reference
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          cat > prepare.py <<'PY'
+          import csv,gzip,math,os,glob
+          ref_bim=os.environ['REF_PREFIX']+'.bim'
+          bypos={}
+          with open(ref_bim) as f:
+              for line in f:
+                  p=line.split()
+                  if len(p)<6: continue
+                  chrom,snp,cm,bp,a1,a2=p[:6]
+                  bypos.setdefault((chrom,str(int(bp))),[]).append((snp,a1.upper(),a2.upper()))
+
+          for fn in sorted(glob.glob('gwas/*.bgz')):
+              stem=os.path.basename(fn).replace('.bgz','')
+              raw=[]
+              with gzip.open(fn,'rt') as f:
+                  rd=csv.DictReader(f,delimiter='\t')
+                  for r in rd:
+                      try:
+                          if str(r['low_confidence_variant']).lower()=='true': continue
+                          p=float(r['pval']); b=float(r['beta']); se=float(r['se']); maf=float(r['minor_AF'])
+                          if not (math.isfinite(p) and math.isfinite(b) and math.isfinite(se) and se>0): continue
+                          if p>=1e-5 or maf<0.01: continue
+                          F=(b/se)**2
+                          if F<=10: continue
+                          parts=r['variant'].split(':')
+                          if len(parts)!=4: continue
+                          chrom,bp,ref,alt=parts
+                          ref=ref.upper(); alt=alt.upper(); ea=r['minor_allele'].upper()
+                          if ea not in (ref,alt): continue
+                          oa=alt if ea==ref else ref
+                          matches=[]
+                          for snp,ra1,ra2 in bypos.get((chrom,str(int(bp))),[]):
+                              if {ra1,ra2}=={ref,alt}:
+                                  matches.append(snp)
+                          if not matches: continue
+                          rsid=matches[0]
+                          raw.append(dict(rsid=rsid,chrom=chrom,pos=int(bp),effect_allele=ea,other_allele=oa,eaf=maf,beta=b,se=se,pval=p,F=F,n=int(float(r['n_complete_samples'])),variant=r['variant']))
+                      except Exception:
+                          continue
+              # unique rsid: best p
+              best={}
+              for x in raw:
+                  if x['rsid'] not in best or x['pval']<best[x['rsid']]['pval']: best[x['rsid']]=x
+              raw=sorted(best.values(),key=lambda x:x['pval'])
+              cols=['rsid','chrom','pos','effect_allele','other_allele','eaf','beta','se','pval','F','n','variant']
+              with open(f'results/{stem}_candidates.csv','w',newline='') as o:
+                  w=csv.DictWriter(o,fieldnames=cols); w.writeheader(); w.writerows(raw)
+              with open(f'results/{stem}.clumpin','w') as o:
+                  o.write('SNP\tP\n')
+                  for x in raw: o.write(f"{x['rsid']}\t{x['pval']:.17g}\n")
+              print(stem,'candidates',len(raw))
+          PY
+          python prepare.py | tee results/candidate_counts.txt
+
+      - name: LD clump r2 0.001 within 10 Mb
+        run: |
+          set -euo pipefail
+          PLINK=$(command -v plink1.9 || command -v plink)
+          for p in results/*.clumpin; do
+            stem=${p%.clumpin}
+            n=$(($(wc -l < "$p")-1))
+            if [ "$n" -le 0 ]; then
+              echo -e 'rsid\tchrom\tpos\teffect_allele\tother_allele\teaf\tbeta\tse\tpval\tF\tn\tvariant' > "${stem}_instruments.tsv"
+              continue
+            fi
+            "$PLINK" --bfile "$REF_PREFIX" --clump "$p" --clump-snp-field SNP --clump-field P --clump-p1 1e-5 --clump-p2 1e-5 --clump-r2 0.001 --clump-kb 10000 --out "$stem"
+          done
+
+      - name: Build final instrument tables
+        run: |
+          set -euo pipefail
+          cat > finalize.py <<'PY'
+          import csv,glob,os
+          for cand in sorted(glob.glob('results/*_candidates.csv')):
+              stem=cand[:-len('_candidates.csv')]
+              rows=list(csv.DictReader(open(cand)))
+              cl=stem+'.clumped'
+              selected=set()
+              if os.path.exists(cl):
+                  with open(cl) as f:
+                      header=None
+                      for line in f:
+                          s=line.strip()
+                          if not s: continue
+                          p=s.split()
+                          if header is None:
+                              if 'SNP' in p: header=p
+                              continue
+                          d=dict(zip(header,p))
+                          if 'SNP' in d: selected.add(d['SNP'])
+              out=stem+'_instruments.csv'
+              with open(out,'w',newline='') as o:
+                  w=csv.DictWriter(o,fieldnames=rows[0].keys() if rows else ['rsid','chrom','pos','effect_allele','other_allele','eaf','beta','se','pval','F','n','variant'])
+                  w.writeheader()
+                  for r in rows:
+                      if r['rsid'] in selected: w.writerow(r)
+              print(os.path.basename(stem),'clumped',len(selected))
+          PY
+          python finalize.py | tee results/clumped_counts.txt
+          echo '--- counts ---'
+          cat results/candidate_counts.txt results/clumped_counts.txt
+          for f in results/*_instruments.csv; do echo "### $f"; cat "$f"; done > results/all_instruments.txt
+
+      - name: Upload clumped instruments
+        uses: actions/upload-artifact@v4
+        with:
+          name: sex-specific-occupational-instruments
+          path: results/
+          retention-days: 2
