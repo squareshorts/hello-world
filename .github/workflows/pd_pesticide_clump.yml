@@ -19,10 +19,10 @@ jobs:
       - name: Download 1000 Genomes EUR LD reference
         run: |
           set -euo pipefail
-          curl -k -L --fail --retry 4 --retry-delay 5 -o 1kg.v3.tgz https://fileserve.mrcieu.ac.uk/ld/1kg.v3.tgz
-          tar -xzf 1kg.v3.tgz
-          find . -maxdepth 3 -type f \( -name 'EUR.bed' -o -name 'EUR.bim' -o -name 'EUR.fam' \) -print
-          REF_BIM=$(find . -type f -name EUR.bim | head -1)
+          curl -L --fail --retry 4 --retry-delay 5 -o eur.tgz http://fileserve.mrcieu.ac.uk/ld/data_maf0.01_rs_ref.tgz
+          tar -xzf eur.tgz
+          find . -maxdepth 4 -type f \( -name 'eur.bed' -o -name 'eur.bim' -o -name 'eur.fam' \) -print
+          REF_BIM=$(find . -type f -name eur.bim | head -1)
           test -n "$REF_BIM"
           echo "REF_PREFIX=${REF_BIM%.bim}" >> "$GITHUB_ENV"
 
@@ -141,7 +141,6 @@ jobs:
               print(os.path.basename(stem),'clumped',len(selected))
           PY
           python finalize.py | tee results/clumped_counts.txt
-          echo '--- counts ---'
           cat results/candidate_counts.txt results/clumped_counts.txt
           for f in results/*_instruments.csv; do echo "### $f"; cat "$f"; done > results/all_instruments.txt
 
