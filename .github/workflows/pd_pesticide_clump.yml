@@ -21,8 +21,8 @@ jobs:
           set -euo pipefail
           curl -L --fail --retry 4 --retry-delay 5 -o eur.tgz http://fileserve.mrcieu.ac.uk/ld/data_maf0.01_rs_ref.tgz
           tar -xzf eur.tgz
-          find . -maxdepth 4 -type f \( -name 'eur.bed' -o -name 'eur.bim' -o -name 'eur.fam' \) -print
-          REF_BIM=$(find . -type f -name eur.bim | head -1)
+          find . -maxdepth 4 -type f \( -name '*.bed' -o -name '*.bim' -o -name '*.fam' \) -print
+          REF_BIM=$(find . -type f -name '*.bim' | head -1)
           test -n "$REF_BIM"
           echo "REF_PREFIX=${REF_BIM%.bim}" >> "$GITHUB_ENV"
 
@@ -53,7 +53,6 @@ jobs:
                   if len(p)<6: continue
                   chrom,snp,cm,bp,a1,a2=p[:6]
                   bypos.setdefault((chrom,str(int(bp))),[]).append((snp,a1.upper(),a2.upper()))
-
           for fn in sorted(glob.glob('gwas/*.bgz')):
               stem=os.path.basename(fn).replace('.bgz','')
               raw=[]
@@ -75,8 +74,7 @@ jobs:
                           oa=alt if ea==ref else ref
                           matches=[]
                           for snp,ra1,ra2 in bypos.get((chrom,str(int(bp))),[]):
-                              if {ra1,ra2}=={ref,alt}:
-                                  matches.append(snp)
+                              if {ra1,ra2}=={ref,alt}: matches.append(snp)
                           if not matches: continue
                           rsid=matches[0]
                           raw.append(dict(rsid=rsid,chrom=chrom,pos=int(bp),effect_allele=ea,other_allele=oa,eaf=maf,beta=b,se=se,pval=p,F=F,n=int(float(r['n_complete_samples'])),variant=r['variant']))
