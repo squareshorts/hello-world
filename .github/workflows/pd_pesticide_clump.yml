@@ -19,7 +19,7 @@ jobs:
       - name: Download 1000 Genomes EUR LD reference
         run: |
           set -euo pipefail
-          curl -L --fail --retry 4 --retry-delay 5 -o 1kg.v3.tgz https://fileserve.mrcieu.ac.uk/ld/1kg.v3.tgz
+          curl -k -L --fail --retry 4 --retry-delay 5 -o 1kg.v3.tgz https://fileserve.mrcieu.ac.uk/ld/1kg.v3.tgz
           tar -xzf 1kg.v3.tgz
           find . -maxdepth 3 -type f \( -name 'EUR.bed' -o -name 'EUR.bim' -o -name 'EUR.fam' \) -print
           REF_BIM=$(find . -type f -name EUR.bim | head -1)
@@ -82,7 +82,6 @@ jobs:
                           raw.append(dict(rsid=rsid,chrom=chrom,pos=int(bp),effect_allele=ea,other_allele=oa,eaf=maf,beta=b,se=se,pval=p,F=F,n=int(float(r['n_complete_samples'])),variant=r['variant']))
                       except Exception:
                           continue
-              # unique rsid: best p
               best={}
               for x in raw:
                   if x['rsid'] not in best or x['pval']<best[x['rsid']]['pval']: best[x['rsid']]=x
