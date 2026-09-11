@@ -1,0 +1,20 @@
+name: CEMHSEY probe
+on:
+  push:
+    branches: [cemhsey-probe-20260910]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Zenodo API
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          u='https://zenodo.org/api/records/14224328'
+          with urllib.request.urlopen(u, timeout=60) as r: d=json.load(r)
+          print('TITLE',d.get('metadata',{}).get('title'))
+          print('ID',d.get('id'))
+          print('NFILES',len(d.get('files',[])))
+          for f in d.get('files',[]):
+              print('FILE',f.get('key'),'SIZE',f.get('size'),'URL',f.get('links',{}).get('self'))
+          PY
