@@ -1,0 +1,24 @@
+name: CEMHSEY longitudinal pilot
+on:
+  push:
+    branches: [cemhsey-longitudinal-pilot-20260910]
+    paths:
+      - 'cemhsey_longitudinal.py'
+      - 'requirements-cemhsey.txt'
+      - '.github/workflows/cemhsey-longitudinal.yml'
+jobs:
+  pilot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-cemhsey.txt
+      - run: python cemhsey_longitudinal.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cemhsey-s1-11day-pilot
+          path: results/
