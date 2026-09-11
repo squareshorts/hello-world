@@ -5,6 +5,7 @@ import pathlib
 import cemhsey_longitudinal as m
 import cemhsey_sparse_ensemble as ens
 
+# Subject is supplied by the GitHub Actions matrix.
 s = int(os.environ["SUBJECT"])
 m.SUBJECT = s
 m.URL = f"https://zenodo.org/api/records/15077957/files/GRASP_S{s}.zip/content"
