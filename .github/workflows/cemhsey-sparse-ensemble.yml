@@ -1,0 +1,23 @@
+name: CEMHSEY sparse ensemble pilot
+on:
+  push:
+    branches: [cemhsey-longitudinal-pilot-20260910]
+    paths:
+      - 'cemhsey_sparse_ensemble.py'
+      - '.github/workflows/cemhsey-sparse-ensemble.yml'
+jobs:
+  ensemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-cemhsey.txt
+      - run: python cemhsey_sparse_ensemble.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cemhsey-s1-sparse-ensemble
+          path: results/
