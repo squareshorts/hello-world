@@ -1,0 +1,37 @@
+name: EMG force expanded
+on:
+  push:
+    branches: [emg-force-expanded-s3-20260910]
+jobs:
+  expanded:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-expanded.txt
+      - name: Fetch selected Hyser trials from PhysioNet S3
+        run: |
+          set -e
+          for s in 1 2; do
+            mkdir -p _data/subject01_session${s}
+            for combo in 1 8 15; do
+              for k in 1 2; do
+                for kind in preprocess force; do
+                  stem=ndof_${kind}_combination${combo}_sample${k}
+                  for ext in hea dat; do
+                    aws s3 cp --no-sign-request s3://physionet-open/hd-semg/2.0.0/ndof_dataset/subject01_session${s}/${stem}.${ext} _data/subject01_session${s}/${stem}.${ext} --only-show-errors
+                  done
+                done
+              done
+            done
+          done
+      - run: python expanded.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expanded-results
+          path: results/
+          if-no-files-found: warn
