@@ -1,0 +1,46 @@
+name: CEMHSEY range probe
+on:
+  push:
+    branches: [cemhsey-range-20260910]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install remotezip requests scipy
+      - name: List and extract CEMHSEY trial via ranged ZIP access
+        run: |
+          python - <<'PY'
+          from remotezip import RemoteZip
+          import io, re
+          from scipy.io import loadmat
+          url='https://zenodo.org/api/records/15077957/files/GRASP_S1.zip/content'
+          with RemoteZip(url) as rz:
+              info=rz.infolist()
+              print('NENTRIES',len(info))
+              names=[z.filename for z in info if not z.is_dir()]
+              print('NFILENAMES',len(names))
+              for n in names[:30]: print('NAME',n)
+              mats=[n for n in names if n.lower().endswith('.mat')]
+              print('NMAT',len(mats))
+              day1=[n for n in mats if re.search(r'day[_-]?1\b|day1\b',n,re.I)]
+              print('DAY1_MATCHES',len(day1))
+              for n in day1[:20]: print('DAY1',n)
+              candidate=(day1 or mats)[:1]
+              if candidate:
+                  n=candidate[0]
+                  b=rz.read(n)
+                  print('EXTRACTED',n,'BYTES',len(b))
+                  try:
+                      d=loadmat(io.BytesIO(b))
+                      print('MAT_KEYS',sorted(k for k in d if not k.startswith('__')))
+                      for k,v in d.items():
+                          if not k.startswith('__'):
+                              print('SHAPE',k,getattr(v,'shape',None),getattr(v,'dtype',None))
+                  except Exception as e:
+                      print('LOADMAT_ERROR',type(e).__name__,str(e))
+          PY
