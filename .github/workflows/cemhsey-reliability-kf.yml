@@ -1,0 +1,24 @@
+name: CEMHSEY reliability-adaptive KF
+
+on:
+  push:
+    branches: [cemhsey-longitudinal-pilot-20260910]
+    paths:
+      - 'cemhsey_reliability_kf.py'
+      - '.github/workflows/cemhsey-reliability-kf.yml'
+  workflow_dispatch:
+
+jobs:
+  reliability-kf:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-cemhsey.txt
+      - run: python cemhsey_reliability_kf.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cemhsey-s1-reliability-kf
+          path: results/
