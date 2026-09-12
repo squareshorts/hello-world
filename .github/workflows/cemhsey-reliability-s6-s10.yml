@@ -1,0 +1,29 @@
+name: CEMHSEY reliability-adaptive KF S6-S10
+
+on:
+  push:
+    branches: [cemhsey-longitudinal-pilot-20260910]
+    paths:
+      - '.github/workflows/cemhsey-reliability-s6-s10.yml'
+  workflow_dispatch:
+
+jobs:
+  subject:
+    strategy:
+      fail-fast: false
+      matrix:
+        subject: [6, 7, 8, 9, 10]
+    runs-on: ubuntu-24.04
+    env:
+      SUBJECT: ${{ matrix.subject }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-cemhsey.txt
+      - run: python cemhsey_reliability_subject_wrapper.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cemhsey-s${{ matrix.subject }}-reliability-kf
+          path: results/
